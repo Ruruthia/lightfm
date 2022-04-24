@@ -8,10 +8,10 @@ import scipy.sparse as sp
 from ._lightfm_fast import (
     CSRMatrix,
     FastLightFM,
-    fit_bpr,
-    fit_logistic,
+    # fit_bpr,
+    # fit_logistic,
     fit_warp,
-    fit_warp_kos,
+    # fit_warp_kos,
     predict_lightfm,
     predict_ranks,
 )
@@ -200,6 +200,8 @@ class LightFM(object):
         user_alpha=0.0,
         max_sampled=10,
         random_state=None,
+        women_ids = None,
+        men_ids = None
     ):
 
         assert item_alpha >= 0.0
@@ -239,6 +241,15 @@ class LightFM(object):
             self.random_state = np.random.RandomState(random_state)
 
         self._reset_state()
+
+
+        # NEW
+        print("my implementation")
+        # should be sorted (for bsearch)
+        women_ids.sort()
+        men_ids.sort()
+        self._women_ids = np.array(women_ids, dtype=np.int32)
+        self._men_ids = np.array(men_ids, dtype=np.int32)
 
     def _reset_state(self):
 
@@ -691,6 +702,17 @@ class LightFM(object):
 
         lightfm_data = self._get_lightfm_data()
 
+        # NEW
+        # Get women-men vector here
+        _, embeddings = self.get_item_representations(features=None)
+        women_embeddings = embeddings[self._women_ids]
+        women_embeddings_mean = women_embeddings.mean(axis=0)
+        men_embedding = embeddings[self._men_ids]
+        men_embeddings_mean = men_embedding.mean(axis=0)
+
+        # vector: men -> women
+        clusters_diff = women_embeddings_mean - men_embeddings_mean
+
         # Call the estimation routines.
         if loss == "warp":
             fit_warp(
@@ -708,6 +730,10 @@ class LightFM(object):
                 self.user_alpha,
                 num_threads,
                 self.random_state,
+                # NEW
+                clusters_diff,
+                self._women_ids,
+                self._men_ids
             )
         elif loss == "bpr":
             fit_bpr(
