@@ -355,7 +355,11 @@ cdef double calculate_cos_sim(FastLightFM lightfm,
 
 cdef void push_embedding(FastLightFM lightfm, flt* old_embedding, flt* new_embedding, flt* embedding_to_set, flt cos_sim) nogil:
     for i in range(lightfm.no_components):
-        embedding_to_set[i] = old_embedding[i] - cos_sim * (new_embedding[i] - old_embedding[i])
+        # correct:
+        embedding_to_set[i] = new_embedding[i] + cos_sim * (new_embedding[i] - old_embedding[i])
+
+        # error:
+        # embedding_to_set[i] = old_embedding[i] - cos_sim * (new_embedding[i] - old_embedding[i])
 
 cdef void update_embedding(FastLightFM lightfm,
                            flt *old_embedding,
