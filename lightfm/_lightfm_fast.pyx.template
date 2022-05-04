@@ -353,19 +353,24 @@ cdef double calculate_cos_sim(FastLightFM lightfm,
     clusters_diff_norm = sqrt(clusters_diff_norm)
     return product/(embedding_diff_norm * clusters_diff_norm)
 
-cdef void push_embedding(FastLightFM lightfm, flt* old_embedding, flt* new_embedding, flt* embedding_to_set, flt cos_sim) nogil:
+cdef void push_embedding(FastLightFM lightfm, flt* old_embedding, flt* new_embedding, flt* embedding_to_set, flt lr) nogil:
     for i in range(lightfm.no_components):
         # correct:
-        embedding_to_set[i] = new_embedding[i] + cos_sim * (new_embedding[i] - old_embedding[i])
+        #embedding_to_set[i] = new_embedding[i] + cos_sim * (new_embedding[i] - old_embedding[i])
 
         # error:
-        # embedding_to_set[i] = old_embedding[i] - cos_sim * (new_embedding[i] - old_embedding[i])
+        # embedding_to_set[i] = old_embedding[i] - cos_sim * (new_embedding[i] -
+
+        # with lr:
+        embedding_to_set[i] = lr * new_embedding[i] + (1 - lr) * old_embedding[i]
+
 
 cdef void update_embedding(FastLightFM lightfm,
                            flt *old_embedding,
                            flt *clusters_diff,
                            int in_woman,
-                           int feature_id) nogil:
+                           int feature_id,
+                           flt lr) nogil:
 
     # Here, we assume that if item is not in_woman, then it is in_man
 
@@ -379,8 +384,11 @@ cdef void update_embedding(FastLightFM lightfm,
 
     cos_sim = calculate_cos_sim(lightfm, old_embedding, new_embedding, clusters_diff, in_woman)
     if cos_sim < 0:
-        push_embedding(lightfm, old_embedding, new_embedding, embedding_to_set, cos_sim)
+        push_embedding(lightfm, old_embedding, new_embedding, embedding_to_set, lr)
         set_feature_embedding(lightfm.item_features, lightfm, feature_id, embedding_to_set)
+
+    free(new_embedding)
+    free(embedding_to_set)
 
 cdef inline void compute_representation(CSRMatrix features,
                                         flt[:, ::1] feature_embeddings,
@@ -644,12 +652,14 @@ cdef void warp_update(double loss,
                       int negative_in_woman,
                       int negative_in_man,
                       flt[::1] clusters_diff,
+                      flt lr,
                       flt *user_repr,
                       flt *pos_it_repr,
                       flt *neg_it_repr,
                       FastLightFM lightfm,
                       double item_alpha,
-                      double user_alpha) nogil:
+                      double user_alpha,
+                      ) nogil:
     """
     Apply the gradient step.
     """
@@ -663,7 +673,6 @@ cdef void warp_update(double loss,
     cdef flt* old_neg_it_repr
     cdef flt* new_pos_it_repr
     cdef flt* new_neg_it_repr
-    cdef flt* embedding_to_set
 
     avg_learning_rate = 0.0
 
@@ -769,15 +778,18 @@ cdef void warp_update(double loss,
     # TODO: Make sure that it is the id feature
 
     if positive_in_man or positive_in_woman:
-        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_woman, positive_item_start_index)
+        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_woman, positive_item_start_index, lr)
 
     if negative_in_man or negative_in_woman:
-        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_woman, negative_item_start_index)
+        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_woman, negative_item_start_index, lr)
 
     # Update the scaling factors for lazy regularization, using the average learning rate
     # of features updated for this example.
     lightfm.item_scale *= (1.0 + item_alpha * avg_learning_rate)
     lightfm.user_scale *= (1.0 + user_alpha * avg_learning_rate)
+
+    free(old_pos_it_repr)
+    free(old_neg_it_repr)
 
 cdef void regularize(FastLightFM lightfm,
                      double item_alpha,
@@ -928,7 +940,8 @@ def fit_warp(CSRMatrix item_features,
              # NEW
              flt[::1] clusters_diff,
              int[::1] women_ids,
-             int[::1] men_ids
+             int[::1] men_ids,
+             flt lr
              ):
     """
     Fit the model using the WARP loss.
@@ -1044,6 +1057,7 @@ def fit_warp(CSRMatrix item_features,
                                 negative_in_women,
                                 negative_in_men,
                                 clusters_diff,
+                                lr,
                                 user_repr,
                                 pos_it_repr,
                                 neg_it_repr,

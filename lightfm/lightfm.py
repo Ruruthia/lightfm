@@ -662,6 +662,7 @@ class LightFM(object):
         if num_threads < 1:
             raise ValueError("Number of threads must be 1 or larger.")
 
+        epoch = 0
         for _ in self._progress(epochs, verbose=verbose):
             self._run_epoch(
                 item_features,
@@ -670,8 +671,9 @@ class LightFM(object):
                 sample_weight_data,
                 num_threads,
                 self.loss,
+                epoch
             )
-
+            epoch += 1
             self._check_finite()
 
         return self
@@ -684,6 +686,7 @@ class LightFM(object):
         sample_weight,
         num_threads,
         loss,
+        epoch
     ):
         """
         Run an individual epoch.
@@ -712,8 +715,12 @@ class LightFM(object):
 
         # vector: men -> women
         clusters_diff = women_embeddings_mean - men_embeddings_mean
-
+        if epoch < 100:
+            lr = 0.9
+        else:
+            lr = 0.2
         # Call the estimation routines.
+
         if loss == "warp":
             fit_warp(
                 CSRMatrix(item_features),
@@ -733,7 +740,8 @@ class LightFM(object):
                 # NEW
                 clusters_diff,
                 self._women_ids,
-                self._men_ids
+                self._men_ids,
+                lr
             )
         elif loss == "bpr":
             fit_bpr(
