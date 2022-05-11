@@ -1044,7 +1044,6 @@ def fit_warp(CSRMatrix item_features,
                     if negative_in_women != 1:
                         negative_in_men = in_category(negative_item_id, men_ids)
 
-
                     warp_update(loss,
                                 item_features,
                                 user_features,

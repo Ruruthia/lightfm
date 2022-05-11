@@ -322,6 +322,18 @@ class LightFM(object):
             self.user_embedding_gradients += 1
             self.user_bias_gradients += 1
 
+    def _word2vec_initialize(self, no_components, no_item_features, no_user_features, word2vec_embeddings):
+        """
+        Initialise internal latent representations.
+        """
+
+        self._initialize(no_components, no_item_features, no_user_features)
+
+        self.item_embeddings = (word2vec_embeddings
+        ).astype(np.float32).copy(order='C')
+
+
+
     def _construct_feature_matrices(
         self, n_users, n_items, user_features, item_features
     ):
@@ -511,6 +523,7 @@ class LightFM(object):
         epochs=1,
         num_threads=1,
         verbose=False,
+        word2vec_embeddings=None
     ):
         """
         Fit the model.
@@ -566,6 +579,7 @@ class LightFM(object):
             epochs=epochs,
             num_threads=num_threads,
             verbose=verbose,
+            word2vec_embeddings=word2vec_embeddings
         )
 
     def fit_partial(
@@ -577,6 +591,7 @@ class LightFM(object):
         epochs=1,
         num_threads=1,
         verbose=False,
+        word2vec_embeddings=None
     ):
         """
         Fit the model.
@@ -647,9 +662,14 @@ class LightFM(object):
         if self.item_embeddings is None:
             # Initialise latent factors only if this is the first call
             # to fit_partial.
-            self._initialize(
-                self.no_components, item_features.shape[1], user_features.shape[1]
-            )
+            if word2vec_embeddings is None:
+                self._initialize(
+                    self.no_components, item_features.shape[1], user_features.shape[1]
+                )
+            else:
+                self._word2vec_initialize(
+                    self.no_components, item_features.shape[1], user_features.shape[1], word2vec_embeddings
+                )
 
         # Check that the dimensionality of the feature matrices has
         # not changed between runs.
@@ -715,10 +735,12 @@ class LightFM(object):
 
         # vector: men -> women
         clusters_diff = women_embeddings_mean - men_embeddings_mean
-        if epoch < 100:
-            lr = 0.9
-        else:
-            lr = 0.2
+
+        # if epoch < 100:
+        #     lr = 0.9
+        # else:
+        lr = 0.2
+        # print(lr)
         # Call the estimation routines.
 
         if loss == "warp":
