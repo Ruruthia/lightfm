@@ -339,10 +339,10 @@ cdef double calculate_cos_sim(FastLightFM lightfm,
                               flt *old_embedding,
                               flt *new_embedding,
                               flt *clusters_diff,
-                              int is_woman) nogil:
+                              int is_a) nogil:
     cdef flt diff = 0, product = 0, embedding_diff_norm = 0, clusters_diff_norm = 0
     for i in range(lightfm.no_components):
-        if is_woman:
+        if is_a:
             diff = new_embedding[i] - old_embedding[i]
         else:
             diff = old_embedding[i] - new_embedding[i]
@@ -368,7 +368,7 @@ cdef void push_embedding(FastLightFM lightfm, flt* old_embedding, flt* new_embed
 cdef void update_embedding(FastLightFM lightfm,
                            flt *old_embedding,
                            flt *clusters_diff,
-                           int in_woman,
+                           int in_a,
                            int feature_id,
                            flt lr) nogil:
 
@@ -382,7 +382,7 @@ cdef void update_embedding(FastLightFM lightfm,
 
     embedding_to_set = <flt *> malloc(sizeof(flt) * lightfm.no_components)
 
-    cos_sim = calculate_cos_sim(lightfm, old_embedding, new_embedding, clusters_diff, in_woman)
+    cos_sim = calculate_cos_sim(lightfm, old_embedding, new_embedding, clusters_diff, in_a)
     if cos_sim < 0:
         push_embedding(lightfm, old_embedding, new_embedding, embedding_to_set, lr)
         set_feature_embedding(lightfm.item_features, lightfm, feature_id, embedding_to_set)
@@ -647,10 +647,10 @@ cdef void warp_update(double loss,
                       int user_id,
                       int positive_item_id,
                       int negative_item_id,
-                      int positive_in_woman,
-                      int positive_in_man,
-                      int negative_in_woman,
-                      int negative_in_man,
+                      int positive_in_a,
+                      int positive_in_b,
+                      int negative_in_a,
+                      int negative_in_b,
                       flt[::1] clusters_diff,
                       flt lr,
                       flt *user_repr,
@@ -777,11 +777,11 @@ cdef void warp_update(double loss,
     # NEW
     # TODO: Make sure that it is the id feature
 
-    if positive_in_man or positive_in_woman:
-        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_woman, positive_item_start_index, lr)
+    if positive_in_a == 1 or positive_in_b == 1:
+        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_a, positive_item_start_index, lr)
 
-    if negative_in_man or negative_in_woman:
-        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_woman, negative_item_start_index, lr)
+    if negative_in_a == 1 or negative_in_b == 1:
+        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_a, negative_item_start_index, lr)
 
     # Update the scaling factors for lazy regularization, using the average learning rate
     # of features updated for this example.
@@ -939,8 +939,9 @@ def fit_warp(CSRMatrix item_features,
              random_state,
              # NEW
              flt[::1] clusters_diff,
-             int[::1] women_ids,
-             int[::1] men_ids,
+             int category_a,
+             int category_b,
+             int[::1] item_category_mapping,
              flt lr
              ):
     """
@@ -957,7 +958,8 @@ def fit_warp(CSRMatrix item_features,
     cdef flt *neg_it_repr
     cdef unsigned int[::1] random_states
     # NEW
-    cdef int positive_in_women = 0, positive_in_men = 0, negative_in_women = 0, negative_in_men = 0
+    cdef int positive_in_a, positive_in_b, negative_in_a, negative_in_b
+    cdef int negative_category, positive_category
 
     random_states = random_state.randint(0,
                                          np.iinfo(np.int32).max,
@@ -1036,13 +1038,21 @@ def fit_warp(CSRMatrix item_features,
 
                     # NEW
 
-                    positive_in_women = in_category(positive_item_id, women_ids)
-                    if positive_in_women != 1:
-                        positive_in_men = in_category(positive_item_id, men_ids)
+                    positive_in_a = 0
+                    positive_in_b = 0
+                    positive_category = int(item_category_mapping[positive_item_id])
+                    if positive_category == category_a:
+                        positive_in_a = 1
+                    elif positive_category == category_b:
+                        positive_in_b = 1
 
-                    negative_in_women = in_category(negative_item_id, women_ids)
-                    if negative_in_women != 1:
-                        negative_in_men = in_category(negative_item_id, men_ids)
+                    negative_in_a = 0
+                    negative_in_b = 0
+                    negative_category = int(item_category_mapping[negative_item_id])
+                    if negative_category == category_a:
+                        negative_in_a = 1
+                    elif negative_category == category_b:
+                        negative_in_b = 1
 
                     warp_update(loss,
                                 item_features,
@@ -1051,10 +1061,10 @@ def fit_warp(CSRMatrix item_features,
                                 positive_item_id,
                                 negative_item_id,
                                 # NEW
-                                positive_in_women,
-                                positive_in_men,
-                                negative_in_women,
-                                negative_in_men,
+                                positive_in_a,
+                                positive_in_b,
+                                negative_in_a,
+                                negative_in_b,
                                 clusters_diff,
                                 lr,
                                 user_repr,

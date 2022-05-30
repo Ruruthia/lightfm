@@ -200,8 +200,10 @@ class LightFM(object):
         user_alpha=0.0,
         max_sampled=10,
         random_state=None,
-        women_ids = None,
-        men_ids = None
+        # women_ids = None,
+        # men_ids = None
+        num_categories=0,
+        item_category_mapping=None,
     ):
 
         assert item_alpha >= 0.0
@@ -244,12 +246,15 @@ class LightFM(object):
 
 
         # NEW
-        print("my implementation")
+        print("my new implementation")
         # should be sorted (for bsearch)
-        women_ids.sort()
-        men_ids.sort()
-        self._women_ids = np.array(women_ids, dtype=np.int32)
-        self._men_ids = np.array(men_ids, dtype=np.int32)
+        # women_ids.sort()
+        # men_ids.sort()
+        # self._women_ids = np.array(women_ids, dtype=np.int32)
+        # self._men_ids = np.array(men_ids, dtype=np.int32)
+        self._num_categories = num_categories
+        # should already be mapped to inner ids
+        self._item_category_mapping = np.array(item_category_mapping, dtype=np.int32)
 
     def _reset_state(self):
 
@@ -728,13 +733,18 @@ class LightFM(object):
         # NEW
         # Get women-men vector here
         _, embeddings = self.get_item_representations(features=None)
-        women_embeddings = embeddings[self._women_ids]
-        women_embeddings_mean = women_embeddings.mean(axis=0)
-        men_embedding = embeddings[self._men_ids]
-        men_embeddings_mean = men_embedding.mean(axis=0)
+        #TODO: test setting p
+        category_a, category_b = np.random.choice(range(self._num_categories), 2, p=None, replace=False)
+        # men - women debug
+        # category_a = 10
+        # category_b = 5
+        print("category a: ", category_a, "category_b: ", category_b)
+        category_a_embeddings, category_b_embeddings = embeddings[self._item_category_mapping == category_a],\
+                                                       embeddings[self._item_category_mapping == category_b]
+        category_a_mean, category_b_mean = category_a_embeddings.mean(axis=0), category_b_embeddings.mean(axis=0)
 
-        # vector: men -> women
-        clusters_diff = women_embeddings_mean - men_embeddings_mean
+        # vector: b -> a
+        clusters_diff = category_a_mean - category_b_mean
 
         # if epoch < 100:
         #     lr = 0.9
@@ -761,8 +771,9 @@ class LightFM(object):
                 self.random_state,
                 # NEW
                 clusters_diff,
-                self._women_ids,
-                self._men_ids,
+                category_a,
+                category_b,
+                self._item_category_mapping,
                 lr
             )
         elif loss == "bpr":
