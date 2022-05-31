@@ -252,9 +252,12 @@ class LightFM(object):
         # men_ids.sort()
         # self._women_ids = np.array(women_ids, dtype=np.int32)
         # self._men_ids = np.array(men_ids, dtype=np.int32)
+        self._custom_implementation = not (num_categories == 0 or item_category_mapping is None)
         self._num_categories = num_categories
         # should already be mapped to inner ids
-        self._item_category_mapping = np.array(item_category_mapping, dtype=np.int32)
+        if self._custom_implementation:
+            self._item_category_mapping = np.array(item_category_mapping, dtype=np.int32)
+
 
     def _reset_state(self):
 
@@ -732,19 +735,24 @@ class LightFM(object):
 
         # NEW
         # Get women-men vector here
-        _, embeddings = self.get_item_representations(features=None)
-        #TODO: test setting p
-        category_a, category_b = np.random.choice(range(self._num_categories), 2, p=None, replace=False)
-        # men - women debug
-        # category_a = 10
-        # category_b = 5
-        print("category a: ", category_a, "category_b: ", category_b)
-        category_a_embeddings, category_b_embeddings = embeddings[self._item_category_mapping == category_a],\
-                                                       embeddings[self._item_category_mapping == category_b]
-        category_a_mean, category_b_mean = category_a_embeddings.mean(axis=0), category_b_embeddings.mean(axis=0)
+        if self._custom_implementation:
+            _, embeddings = self.get_item_representations(features=None)
+            #TODO: test setting p
+            category_a, category_b = np.random.choice(range(self._num_categories), 2, p=None, replace=False)
+            # men - women debug
+            # category_a = 10
+            # category_b = 5
+            print("category a: ", category_a, "category_b: ", category_b)
+            category_a_embeddings, category_b_embeddings = embeddings[self._item_category_mapping == category_a],\
+                                                           embeddings[self._item_category_mapping == category_b]
+            category_a_mean, category_b_mean = category_a_embeddings.mean(axis=0), category_b_embeddings.mean(axis=0)
 
-        # vector: b -> a
-        clusters_diff = category_a_mean - category_b_mean
+            # vector: b -> a
+            clusters_diff = category_a_mean - category_b_mean
+        else:
+            category_a, category_b = -1, -1
+            self._item_category_mapping = np.ones(len(self.item_embeddings), dtype=np.int32)
+            clusters_diff = np.zeros(self.no_components, dtype=np.float32)
 
         # if epoch < 100:
         #     lr = 0.9
