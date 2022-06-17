@@ -302,8 +302,6 @@ cdef inline int in_category(int item_id, int[::1] category_ids) nogil:
                len(category_ids),
                sizeof(int),
                int_compare) == NULL:
-        # with gil:
-        #     print(item_id)
         return 0
     else:
         return 1
@@ -313,7 +311,8 @@ cdef void get_feature_embedding(flt[:, ::1] feature_embeddings,
                                 int feature_id,
                                 flt *embedding
                                 ) nogil:
-
+    with gil:
+        print("HERE")
     for i in range(lightfm.no_components):
             embedding[i] = feature_embeddings[feature_id, i]
 
@@ -720,11 +719,12 @@ cdef void warp_update(double loss,
     # Update latent representations.
 
     # NEW
+
     old_pos_it_repr = <flt *> malloc(sizeof(flt) * lightfm.no_components)
-    get_feature_embedding(lightfm.item_features, lightfm, positive_item_start_index, old_pos_it_repr)
+    get_feature_embedding(lightfm.item_features, lightfm, item_features.indices[positive_item_start_index], old_pos_it_repr)
 
     old_neg_it_repr = <flt *> malloc(sizeof(flt) * lightfm.no_components)
-    get_feature_embedding(lightfm.item_features, lightfm, negative_item_start_index, old_neg_it_repr)
+    get_feature_embedding(lightfm.item_features, lightfm, item_features.indices[negative_item_start_index], old_neg_it_repr)
 
     for i in range(lightfm.no_components):
 
@@ -778,10 +778,10 @@ cdef void warp_update(double loss,
     # TODO: Make sure that it is the id feature
 
     if positive_in_a == 1 or positive_in_b == 1:
-        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_a, positive_item_start_index, lr)
+        update_embedding(lightfm, old_pos_it_repr, &clusters_diff[0], positive_in_a, item_features.indices[positive_item_start_index], lr)
 
     if negative_in_a == 1 or negative_in_b == 1:
-        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_a, negative_item_start_index, lr)
+        update_embedding(lightfm, old_neg_it_repr, &clusters_diff[0], negative_in_a, item_features.indices[negative_item_start_index], lr)
 
     # Update the scaling factors for lazy regularization, using the average learning rate
     # of features updated for this example.
@@ -1053,7 +1053,6 @@ def fit_warp(CSRMatrix item_features,
                         negative_in_a = 1
                     elif negative_category == category_b:
                         negative_in_b = 1
-
                     warp_update(loss,
                                 item_features,
                                 user_features,
