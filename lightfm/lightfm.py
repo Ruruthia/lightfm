@@ -330,15 +330,19 @@ class LightFM(object):
             self.user_embedding_gradients += 1
             self.user_bias_gradients += 1
 
-    def _word2vec_initialize(self, no_components, no_item_features, no_user_features, word2vec_embeddings):
+    def _word2vec_initialize(self, no_components, no_item_features, no_user_features, word2vec_item_embeddings, word2vec_user_embeddings):
         """
         Initialise internal latent representations.
         """
 
         self._initialize(no_components, no_item_features, no_user_features)
 
-        self.item_embeddings = (word2vec_embeddings
-        ).astype(np.float32).copy(order='C')
+        if word2vec_item_embeddings is not None:
+            self.item_embeddings = (word2vec_item_embeddings
+            ).astype(np.float32).copy(order='C')
+        if word2vec_user_embeddings is not None:
+            self.user_embeddings = (word2vec_user_embeddings
+            ).astype(np.float32).copy(order='C')
 
 
 
@@ -531,7 +535,8 @@ class LightFM(object):
         epochs=1,
         num_threads=1,
         verbose=False,
-        word2vec_embeddings=None
+        word2vec_item_embeddings=None,
+        word2vec_user_embeddings=None
     ):
         """
         Fit the model.
@@ -587,7 +592,8 @@ class LightFM(object):
             epochs=epochs,
             num_threads=num_threads,
             verbose=verbose,
-            word2vec_embeddings=word2vec_embeddings
+            word2vec_item_embeddings=word2vec_item_embeddings,
+            word2vec_user_embeddings=word2vec_user_embeddings
         )
 
     def fit_partial(
@@ -599,7 +605,8 @@ class LightFM(object):
         epochs=1,
         num_threads=1,
         verbose=False,
-        word2vec_embeddings=None
+        word2vec_item_embeddings=None,
+        word2vec_user_embeddings=None,
     ):
         """
         Fit the model.
@@ -670,13 +677,13 @@ class LightFM(object):
         if self.item_embeddings is None:
             # Initialise latent factors only if this is the first call
             # to fit_partial.
-            if word2vec_embeddings is None:
+            if word2vec_item_embeddings is None and word2vec_user_embeddings is None:
                 self._initialize(
                     self.no_components, item_features.shape[1], user_features.shape[1]
                 )
             else:
                 self._word2vec_initialize(
-                    self.no_components, item_features.shape[1], user_features.shape[1], word2vec_embeddings
+                    self.no_components, item_features.shape[1], user_features.shape[1], word2vec_item_embeddings, word2vec_user_embeddings
                 )
 
         # Check that the dimensionality of the feature matrices has
@@ -737,12 +744,12 @@ class LightFM(object):
         # Get women-men vector here
         if self._custom_implementation:
             _, embeddings = self.get_item_representations(features=None)
-            #TODO: test setting p
+
             category_a, category_b = np.random.choice(range(self._num_categories), 2, p=None, replace=False)
             # men - women debug
             # category_a = 10
             # category_b = 5
-            print("category a: ", category_a, "category_b: ", category_b)
+            # print("category a: ", category_a, "category_b: ", category_b)
             category_a_embeddings, category_b_embeddings = embeddings[self._item_category_mapping == category_a],\
                                                            embeddings[self._item_category_mapping == category_b]
             category_a_mean, category_b_mean = category_a_embeddings.mean(axis=0), category_b_embeddings.mean(axis=0)
